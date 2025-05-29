@@ -4,6 +4,8 @@ from bilibili_api import video
 from bilibili_api.exceptions.ResponseCodeException import ResponseCodeException
 from utils.models import UploaderInfo, VideoInfo
 from typing import List, Optional
+import os
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -128,3 +130,30 @@ async def fetch_video_info(
     except Exception as e:
         logger.error("Unexpected error for video %s: %s", bvid, e)
     return None
+
+
+def ensure_channel_map_exists(channel_map_path):
+    if not os.path.exists(channel_map_path):
+        os.makedirs(os.path.dirname(channel_map_path), exist_ok=True)
+        example = {"tianjiang": 21143599}
+        with open(channel_map_path, "w", encoding="utf-8") as f:
+            json.dump(example, f, ensure_ascii=False, indent=4)
+        logger.warning(
+            f"Created example channel map at {channel_map_path}. Please edit it and rerun."
+        )
+        return False
+    return True
+
+
+def load_channel_map(channel_map_path):
+    with open(channel_map_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_channel_id(channel_map, channel_name, channel_map_path):
+    if channel_name not in channel_map:
+        logger.error(
+            f"Channel '{channel_name}' not found in {channel_map_path}. Please add it and rerun."
+        )
+        return None
+    return channel_map[channel_name]

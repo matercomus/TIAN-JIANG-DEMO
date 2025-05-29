@@ -11,7 +11,7 @@ wheels/
 .env
 
 # Video info
-video_info.json
+channels_info/
 
 # VSCode settings
 .vscode/settings.json

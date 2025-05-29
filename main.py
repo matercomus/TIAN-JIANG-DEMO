@@ -7,7 +7,7 @@ import json
 import logging
 from bilibili_api.exceptions.ResponseCodeException import ResponseCodeException
 import time
-from utils.bili_video import get_all_bvids, fetch_video_info
+from utils.bili_video import get_all_bvids, fetch_video_info, fetch_uploader_info
 
 load_dotenv()
 
@@ -22,9 +22,10 @@ async def main() -> None:
     credential = Credential(sessdata=SESSDATA, bili_jct=BILI_JCT, buvid3=BUVID3)
     user = User(int(TIAN_JIANG_CHANNEL_ID), credential=credential)
     all_bvids = await get_all_bvids(user)
+    uploader_info = await fetch_uploader_info(user)
     all_video_info = []
     for idx, bvid in enumerate(all_bvids, 1):
-        info = await fetch_video_info(bvid, credential, idx, len(all_bvids))
+        info = await fetch_video_info(bvid, credential, idx, len(all_bvids), uploader_info)
         if info is not None:
             all_video_info.append(info)
     with open('video_info.json', 'w', encoding='utf-8') as f:

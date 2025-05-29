@@ -2,8 +2,10 @@ import logging
 import time
 from bilibili_api import video
 from bilibili_api.exceptions.ResponseCodeException import ResponseCodeException
+from utils.models import UploaderInfo, VideoInfo
+from typing import List, Optional
 
-async def get_all_bvids(user, page_size=30):
+async def get_all_bvids(user, page_size: int = 30) -> List[str]:
     """Fetch all BVIDs for a user asynchronously."""
     all_bvids = []
     page = 1
@@ -23,7 +25,25 @@ async def get_all_bvids(user, page_size=30):
     logging.info("Total videos found: %d", len(all_bvids))
     return all_bvids
 
-async def fetch_video_info(bvid, credential, idx, total):
+async def fetch_uploader_info(user) -> UploaderInfo:
+    try:
+        up_info = await user.get_user_info()
+        return UploaderInfo(
+            uploader_mid=user.get_uid(),
+            uploader_name=up_info.get('name'),
+            uploader_follower=up_info.get('follower'),
+            uploader_total_videos=up_info.get('archive_count')
+        )
+    except Exception as e:
+        logging.warning("Could not fetch uploader info: %s", e)
+        return UploaderInfo(
+            uploader_mid=user.get_uid(),
+            uploader_name=None,
+            uploader_follower=None,
+            uploader_total_videos=None
+        )
+
+async def fetch_video_info(bvid: str, credential, idx: int, total: int, uploader_info: Optional[UploaderInfo] = None) -> Optional[VideoInfo]:
     v = video.Video(bvid, credential=credential)
     try:
         logging.info("[%d/%d] Fetching info for video: %s", idx, total, bvid)
@@ -31,52 +51,67 @@ async def fetch_video_info(bvid, credential, idx, total):
         # Add tags (full list)
         try:
             tags = await v.get_tags()
-            video_info['tags'] = tags
         except Exception as e:
-            video_info['tags'] = []
+            tags = []
             logging.warning("Could not fetch tags for %s: %s", bvid, e)
         # Add related videos (full list)
         try:
             related = await v.get_related()
-            # Some APIs return a dict with 'data' key, some return a list directly
             if isinstance(related, dict) and 'data' in related:
-                video_info['related_videos'] = related['data']
+                related_videos = related['data']
             else:
-                video_info['related_videos'] = related
+                related_videos = related
         except Exception as e:
-            video_info['related_videos'] = []
+            related_videos = []
             logging.warning("Could not fetch related for %s: %s", bvid, e)
         # Add danmaku count
         try:
-            video_info['danmaku_count'] = video_info['stat']['danmaku']
+            danmaku_count = video_info['stat']['danmaku']
         except Exception:
-            video_info['danmaku_count'] = None
+            danmaku_count = None
         # Add number of pages
         try:
-            video_info['num_pages'] = len(video_info.get('pages', []))
+            num_pages = len(video_info.get('pages', []))
         except Exception:
-            video_info['num_pages'] = None
+            num_pages = None
         # Add time since upload (in days)
         try:
-            video_info['days_since_upload'] = (time.time() - video_info['pubdate']) / 86400
+            days_since_upload = (time.time() - video_info['pubdate']) / 86400
         except Exception:
-            video_info['days_since_upload'] = None
-        # Add uploader info (mid, name, follower count, total uploads)
+            days_since_upload = None
+        # Uploader info
+        uploader = uploader_info or UploaderInfo(
+            uploader_mid=video_info.get('owner', {}).get('mid'),
+            uploader_name=video_info.get('owner', {}).get('name'),
+            uploader_follower=None,
+            uploader_total_videos=None
+        )
+        # Build VideoInfo
         try:
-            owner = video_info.get('owner', {})
-            video_info['uploader_mid'] = owner.get('mid')
-            video_info['uploader_name'] = owner.get('name')
-            from bilibili_api.user import User as BUser
-            up_user = BUser(owner.get('mid'))
-            up_info = await up_user.get_user_info()
-            video_info['uploader_follower'] = up_info.get('follower')
-            video_info['uploader_total_videos'] = up_info.get('archive_count')
+            return VideoInfo(
+                bvid=video_info['bvid'],
+                title=video_info.get('title', ''),
+                desc=video_info.get('desc'),
+                pubdate=video_info.get('pubdate'),
+                duration=video_info.get('duration'),
+                tname=video_info.get('tname'),
+                stat=video_info.get('stat', {}),
+                owner=video_info.get('owner', {}),
+                pages=video_info.get('pages'),
+                rights=video_info.get('rights'),
+                tags=tags,
+                related_videos=related_videos,
+                danmaku_count=danmaku_count,
+                num_pages=num_pages,
+                days_since_upload=days_since_upload,
+                uploader_mid=uploader.uploader_mid,
+                uploader_name=uploader.uploader_name,
+                uploader_follower=uploader.uploader_follower,
+                uploader_total_videos=uploader.uploader_total_videos
+            )
         except Exception as e:
-            video_info['uploader_follower'] = None
-            video_info['uploader_total_videos'] = None
-            logging.warning("Could not fetch uploader info for %s: %s", bvid, e)
-        logging.info("Fetched info for video: %s", bvid)
-        return video_info
+            logging.error(f"Failed to build VideoInfo for {bvid}: {e}")
+            return None
     except ResponseCodeException as e:
         logging.warning("Video %s could not be fetched: %s", bvid, e)
     except Exception as e:

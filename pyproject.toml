@@ -4,4 +4,9 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "bilibili-api-dev>=16.2.0b1",
+    "bilibili-api-python>=17.2.0",
+    "dotenv>=0.9.9",
+    "polars>=1.30.0",
+]

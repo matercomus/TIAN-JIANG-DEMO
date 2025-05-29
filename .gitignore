@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+
+# Video info
+video_info.json
+
+# VSCode settings
+.vscode/settings.json

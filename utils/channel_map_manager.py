@@ -6,6 +6,7 @@ from typing import Dict, List
 from pydantic import BaseModel, Field
 from bilibili_api.user import User
 from bilibili_api import Credential
+from utils.models import VideoInfo
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,91 @@ class ChannelMapManager:
         else:
             logger.info("No channel names updated.")
 
+    def update_map_from_related_channels(
+        self,
+        info_dir: str,
+        fetch_names: bool = False,
+        name_map: Dict[str, str] = None,
+        sessdata=None,
+        bili_jct=None,
+        buvid3=None,
+    ):
+        """
+        Scan all channel info files in info_dir, extract uploader/channel IDs from related_videos,
+        and update the channel map efficiently (skip already present). Optionally fetch names.
+        """
+        import glob
+        from tqdm import tqdm
+
+        new_ids = set()
+        info_files = glob.glob(os.path.join(info_dir, "*.json"))
+        logger.info(f"Scanning {len(info_files)} channel info files in {info_dir}")
+        for file in tqdm(info_files, desc="Scanning channel info files"):
+            try:
+                with open(file, "r", encoding="utf-8") as f:
+                    try:
+                        videos = json.load(f)
+                    except Exception as e:
+                        logger.warning(f"Could not parse {file}: {e}")
+                        continue
+                for v in videos:
+                    try:
+                        vi = VideoInfo(**v)
+                        for rel in vi.related_videos:
+                            owner = rel.get("owner", {})
+                            mid = owner.get("mid")
+                            if mid and mid not in self.channel_map.values():
+                                new_ids.add(mid)
+                    except Exception as e:
+                        logger.warning(f"Malformed video entry in {file}: {e}")
+            except Exception as e:
+                logger.warning(f"Could not read {file}: {e}")
+        logger.info(f"Found {len(new_ids)} new related channel ids.")
+        # Optionally fetch names
+        id_to_name = {}
+        if fetch_names and new_ids:
+            from bilibili_api.user import User
+            from bilibili_api import Credential
+            import asyncio
+
+            async def fetch_name(mid, cred=None):
+                try:
+                    user = User(int(mid), credential=cred) if cred else User(int(mid))
+                    info = await user.get_user_info()
+                    return info.get("name") or str(mid)
+                except Exception as e:
+                    logger.warning(f"Could not fetch name for {mid}: {e}")
+                    return str(mid)
+
+            cred = None
+            if sessdata and bili_jct and buvid3:
+                cred = Credential(sessdata=sessdata, bili_jct=bili_jct, buvid3=buvid3)
+
+            async def fetch_all_names():
+                tasks = [fetch_name(mid, cred) for mid in new_ids]
+                return await asyncio.gather(*tasks)
+
+            names = asyncio.get_event_loop().run_until_complete(fetch_all_names())
+            id_to_name = {str(mid): name for mid, name in zip(new_ids, names)}
+        # Use name_map if provided
+        if name_map:
+            for mid in new_ids:
+                if str(mid) in name_map:
+                    id_to_name[str(mid)] = name_map[str(mid)]
+        # Add to map
+        added = 0
+        for mid in new_ids:
+            name = id_to_name.get(str(mid), str(mid))
+            if name not in self.channel_map:
+                self.channel_map[name] = mid
+                logger.info(f"Added related channel: {name} -> {mid}")
+                added += 1
+        if added:
+            self.save_map()
+            logger.info(f"Added {added} new related channels to the map.")
+        else:
+            logger.info("No new related channels to add.")
+
 
 if __name__ == "__main__":
     import argparse
@@ -152,6 +238,12 @@ if __name__ == "__main__":
         "--fetch-names",
         action="store_true",
         help="Fetch channel names for all ids in the map and update the map keys",
+    )
+    parser.add_argument(
+        "--related-dir",
+        type=str,
+        default="channels_info",
+        help="Directory of channel info JSON files to scan for related channels (default: channels_info)",
     )
     args = parser.parse_args()
 
@@ -196,3 +288,15 @@ if __name__ == "__main__":
         bili_jct = os.getenv("BILI_JCT")
         buvid3 = os.getenv("BUVID3")
         mgr.fetch_and_update_names(sessdata, bili_jct, buvid3)
+    if args.related_dir:
+        logger.info(f"Scanning related channels from: {args.related_dir}")
+        mgr.update_map_from_related_channels(
+            info_dir=args.related_dir,
+            fetch_names=args.fetch_names,
+            name_map=name_map,
+            sessdata=os.getenv("SESSDATA"),
+            bili_jct=os.getenv("BILI_JCT"),
+            buvid3=os.getenv("BUVID3"),
+        )
+        # Optionally exit after this action
+        exit(0)

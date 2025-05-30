@@ -10,6 +10,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "polars>=1.30.0",
     "pydantic>=2.11.5",
+    "pyjwt>=2.10.1",
     "pytest>=8.3.5",
 ]
 

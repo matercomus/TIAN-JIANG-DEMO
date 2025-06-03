@@ -8,10 +8,16 @@ dependencies = [
     "bilibili-api-dev>=16.2.0b1",
     "bilibili-api-python>=17.2.0",
     "dotenv>=0.9.9",
+    "ipykernel>=6.29.5",
+    "matplotlib>=3.10.3",
+    "numpy>=2.2.6",
+    "pip>=25.1.1",
+    "plotly>=6.1.2",
     "polars>=1.30.0",
     "pydantic>=2.11.5",
     "pyjwt>=2.10.1",
     "pytest>=8.3.5",
+    "seaborn>=0.13.2",
 ]
 
 [tool.pytest.ini_options]

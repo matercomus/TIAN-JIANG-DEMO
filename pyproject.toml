@@ -10,6 +10,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
+    "nbformat>=5.10.4",
     "numpy>=2.2.6",
     "pip>=25.1.1",
     "plotly>=6.1.2",
